@@ -1,5 +1,5 @@
-import { Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
+import { Request, Response } from 'express';
 import { prisma } from '../config/prisma';
 import { generateToken } from '../utils/generateToken';
 
