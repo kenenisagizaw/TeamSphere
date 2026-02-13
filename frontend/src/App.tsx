@@ -1,10 +1,10 @@
 import { Navigate, Route, Routes } from "react-router-dom";
+import "./App.css";
 import { useAuth } from "./context/AuthContext";
 import Dashboard from "./pages/Dashboard";
 import LoginPage from "./pages/LoginPage";
 import RegisterPage from "./pages/RegisterPage";
 import WorkspacePage from "./pages/WorkspacePage";
-import "./App.css";
 
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   const { token } = useAuth();
