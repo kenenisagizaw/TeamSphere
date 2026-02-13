@@ -1,40 +1,40 @@
-import React, { useContext, useState } from "react";
-import api from "../api/axios";
-import { AuthContext } from "../context/AuthContext";
+import { useState } from "react";
+import { useNavigate } from "react-router-dom";
+import LoginForm from "../components/auth/LoginForm";
+import { useAuth } from "../context/AuthContext";
 
 const LoginPage = () => {
-  const { login } = useContext(AuthContext)!;
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+  const { login } = useAuth();
+  const navigate = useNavigate();
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSubmit = async (payload: { email: string; password: string }) => {
+    setLoading(true);
+    setError(null);
     try {
-      const { data } = await api.post("/auth/login", { email, password });
-      login(data);
-    } catch (err) {
-      console.error(err);
+      await login(payload);
+      navigate("/dashboard", { replace: true });
+    } catch {
+      setError("Login failed. Check your credentials.");
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
-    <form onSubmit={handleSubmit} className="flex flex-col gap-4 w-96 mx-auto mt-20">
-      <input
-        type="email"
-        placeholder="Email"
-        value={email}
-        onChange={e => setEmail(e.target.value)}
-        className="p-2 border rounded"
-      />
-      <input
-        type="password"
-        placeholder="Password"
-        value={password}
-        onChange={e => setPassword(e.target.value)}
-        className="p-2 border rounded"
-      />
-      <button type="submit" className="bg-blue-500 text-white p-2 rounded">Login</button>
-    </form>
+    <section className="auth">
+      <div className="auth-tabs">
+        <button className="active" type="button">
+          Login
+        </button>
+        <button type="button" onClick={() => navigate("/register")}>
+          Register
+        </button>
+      </div>
+      {error && <div className="alert">{error}</div>}
+      <LoginForm onSubmit={handleSubmit} loading={loading} />
+    </section>
   );
 };
 
