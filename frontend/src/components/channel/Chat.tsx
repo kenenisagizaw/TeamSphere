@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import { useSocket } from "../../context/SocketContext";
 import api from "../../api/axios";
+import { useSocket } from "../../context/SocketContext";
 
 interface Message {
   id: number;
