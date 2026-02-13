@@ -22,13 +22,7 @@ const Dashboard = () => {
       if (!token) return;
       try {
         const data = await getWorkspaces(token);
-        setWorkspaces(
-          data.map((item) => ({
-            id: item.workspace.id,
-            name: item.workspace.name,
-            isMember: true,
-          }))
-        );
+        setWorkspaces(data);
         setError(null);
       } catch (err) {
         setError("Failed to load workspaces.");
