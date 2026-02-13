@@ -1,78 +1,72 @@
-import { useContext, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
-import type { Channel } from "../api";
-import { createChannel, getChannels } from "../api";
+import api from "../api/axios";
 import ChannelList from "../components/channel/ChannelList";
 import Chat from "../components/channel/Chat";
-import { useAuth } from "../context/AuthContext";
-import { SocketContext } from "../context/SocketContext";
+import { useSocket } from "../context/SocketContext";
+interface Channel {
+  id: number;
+  name: string;
+}
 
 const WorkspacePage = () => {
   const { workspaceId } = useParams<{ workspaceId: string }>();
-  const { token } = useAuth();
+  const socket = useSocket();
+
   const [channels, setChannels] = useState<Channel[]>([]);
-  const [selectedChannelId, setSelectedChannelId] = useState<number | null>(
-    null
-  );
-  const { socket } = useContext(SocketContext);
+  const [selectedChannel, setSelectedChannel] = useState<Channel | null>(null);
 
-  const numericWorkspaceId = workspaceId ? Number(workspaceId) : null;
-
+  // Fetch channels for this workspace
   useEffect(() => {
     const fetchChannels = async () => {
-      if (!token || !numericWorkspaceId) return;
+      if (!workspaceId) return;
       try {
-        const data = await getChannels(token, numericWorkspaceId);
+        const { data } = await api.get(`/workspaces/${workspaceId}/channels`);
         setChannels(data);
-        if (data.length > 0) setSelectedChannelId(data[0].id);
+
+        // Auto-select first channel if none selected
+        if (data.length > 0 && !selectedChannel) {
+          setSelectedChannel(data[0]);
+        }
       } catch (err) {
         console.error(err);
       }
     };
-
     fetchChannels();
-  }, [numericWorkspaceId, token]);
+  }, [workspaceId]);
 
-  const handleCreateChannel = async (name: string) => {
-    if (!token || !numericWorkspaceId) return;
-    try {
-      await createChannel(token, {
-        name,
-        workspaceId: numericWorkspaceId,
-      });
-      const data = await getChannels(token, numericWorkspaceId);
-      setChannels(data);
-      if (data.length > 0) setSelectedChannelId(data[0].id);
-    } catch (err) {
-      console.error(err);
-    }
-  };
+  // Listen for new channels created in this workspace
+  useEffect(() => {
+    if (!socket || !workspaceId) return;
+
+    socket.on("channelCreated", (channel: Channel) => {
+      setChannels((prev) => [...prev, channel]);
+      // Optionally auto-select newly created channel
+      setSelectedChannel(channel);
+    });
+
+    return () => {
+      socket.off("channelCreated");
+    };
+  }, [socket, workspaceId]);
+
+  if (!workspaceId) return <div>Workspace not found</div>;
 
   return (
-    <div className="dashboard">
-      <section className="panel">
-        <div className="panel-header">
-          <h2>Channels</h2>
-          <span className="badge">{channels.length}</span>
+    <div className="flex h-screen">
+      <ChannelList
+        channels={channels}
+        selectedChannel={selectedChannel}
+        onSelect={setSelectedChannel}
+        workspaceId={workspaceId}
+      />
+      {selectedChannel ? (
+        <Chat channelId={selectedChannel.id} />
+      ) : (
+        <div className="flex-1 flex items-center justify-center text-gray-400">
+          Select a channel to start chatting
         </div>
-        <ChannelList
-          channels={channels}
-          selectedChannelId={selectedChannelId}
-          onSelectChannel={(channel) => setSelectedChannelId(channel.id)}
-          onCreate={handleCreateChannel}
-        />
-      </section>
-
-      <section className="panel">
-        <div className="panel-header">
-          <h2>Chat</h2>
-        </div>
-        {selectedChannelId ? (
-          <Chat channelId={selectedChannelId} socket={socket} />
-        ) : (
-          <p className="muted">Select a channel to start chatting.</p>
-        )}
-      </section>
+      )}
     </div>
   );
 };
