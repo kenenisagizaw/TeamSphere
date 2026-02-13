@@ -70,6 +70,15 @@ export const createWorkspace = async (
   return data;
 };
 
+export const joinWorkspace = async (token: string, workspaceId: number) => {
+  const { data } = await api.post(
+    `/workspaces/${workspaceId}/join`,
+    {},
+    authHeaders(token)
+  );
+  return data;
+};
+
 export const getChannels = async (token: string, workspaceId: number) => {
   const { data } = await api.get<Channel[]>(
     `/channels/${workspaceId}`,
@@ -89,3 +98,5 @@ export const createChannel = async (
   );
   return data;
 };
+
+export default api;
