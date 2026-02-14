@@ -1,9 +1,5 @@
 import React from "react";
-
-interface Channel {
-  id: number;
-  name: string;
-}
+import type { Channel } from "../../api";
 
 interface Props {
   channels: Channel[];
