@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import api from "../../api/axios";
 import { useSocket } from "../../context/SocketContext";
+import { useAuth } from "../../context/AuthContext";
 
 interface Message {
   id: number;
@@ -14,17 +15,22 @@ interface Props {
 
 const Chat: React.FC<Props> = ({ channelId }) => {
   const socket = useSocket();
+  const { user } = useAuth();
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState("");
 
-  // Fetch existing messages
+  // Fetch existing messages and join channel room
   useEffect(() => {
     const fetchMessages = async () => {
       const { data } = await api.get(`/channels/${channelId}/messages`);
       setMessages(data);
     };
     fetchMessages();
-  }, [channelId]);
+
+    if (socket) {
+      socket.emit("joinChannel", channelId);
+    }
+  }, [channelId, socket]);
 
   // Listen for incoming messages
   useEffect(() => {
@@ -43,9 +49,13 @@ const Chat: React.FC<Props> = ({ channelId }) => {
 
   // Send a message
   const sendMessage = () => {
-    if (!newMessage.trim() || !socket) return;
+    if (!newMessage.trim() || !socket || !user?.id) return;
 
-    socket.emit("sendMessage", { channelId, content: newMessage });
+    socket.emit("sendMessage", {
+      channelId,
+      content: newMessage,
+      senderId: user.id,
+    });
     setNewMessage("");
   };
 
