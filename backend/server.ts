@@ -19,12 +19,14 @@ io.on("connection", (socket) => {
     socket.join(`channel_${channelId}`);
   });
 
-  socket.on("sendMessage", async ({ channelId, content }) => {
+  socket.on("sendMessage", async ({ channelId, content, senderId }) => {
+    if (!senderId || !content) return;
+
     const message = await prisma.message.create({
       data: {
         content,
         channelId,
-        senderId: 1,
+        senderId,
       },
       include: { sender: true },
     });
