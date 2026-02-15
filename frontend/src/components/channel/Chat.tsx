@@ -15,14 +15,17 @@ interface Props {
 
 const Chat: React.FC<Props> = ({ channelId }) => {
   const socket = useSocket();
-  const { user } = useAuth();
+  const { user, token } = useAuth();
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState("");
 
   // Fetch existing messages and join channel room
   useEffect(() => {
     const fetchMessages = async () => {
-      const { data } = await api.get(`/channels/${channelId}/messages`);
+      if (!token) return;
+      const { data } = await api.get(`/channels/${channelId}/messages`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
       setMessages(data);
     };
     fetchMessages();
@@ -30,7 +33,7 @@ const Chat: React.FC<Props> = ({ channelId }) => {
     if (socket) {
       socket.emit("joinChannel", channelId);
     }
-  }, [channelId, socket]);
+  }, [channelId, socket, token]);
 
   // Listen for incoming messages
   useEffect(() => {
