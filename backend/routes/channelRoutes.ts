@@ -4,7 +4,7 @@ import { protect } from '../middlewares/authMiddleware';
 
 const router = express.Router();
 
-router.post('/', protect, createChannel); // Create channel
+router.post('/', protect, createChannel); 
 router.get('/:workspaceId', protect, getChannels); // Get channels for workspace
 router.get("/:channelId/messages", protect, getChannelMessages);
 
