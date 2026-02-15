@@ -12,7 +12,7 @@ export const SocketProvider = ({ children }: { children: React.ReactNode }) => {
     if (!token) return;
 
     const newSocket = io("http://localhost:5000", {
-      auth: { token }, // 🔐 send JWT here
+      auth: { token }, 
     });
 
     setSocket(newSocket);
