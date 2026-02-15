@@ -92,5 +92,11 @@ export const getChannelMessages = async (req: AuthRequest, res: Response) => {
     },
   });
 
-  res.json(messages);
+  const result = messages.map((message) => ({
+    id: message.id,
+    content: message.content,
+    userName: message.sender?.name ?? "Unknown",
+  }));
+
+  res.json(result);
 };
