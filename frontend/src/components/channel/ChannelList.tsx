@@ -3,6 +3,18 @@ import type { Channel } from "../../api";
 import { createChannel, getChannels } from "../../api";
 import { useAuth } from "../../context/AuthContext";
 import { useSocket } from "../../context/SocketContext";
+import {
+  Hash,
+  Plus,
+  X,
+  Loader2,
+  CheckCircle2,
+  AlertCircle,
+  ChevronDown,
+  ChevronRight,
+  MessageSquare,
+  Sparkles
+} from "lucide-react";
 
 interface Props {
   workspaceId: number;
@@ -22,113 +34,255 @@ const ChannelList: React.FC<Props> = ({
   const [modalOpen, setModalOpen] = useState(false);
   const [channelName, setChannelName] = useState("");
   const [loading, setLoading] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(true);
+  const [notification, setNotification] = useState<
+    { type: "success" | "error"; message: string } | null
+  >(null);
 
-  // Fetch channels
+  // ✅ Fetch channels
   useEffect(() => {
     if (!token) return;
 
-    getChannels(token, workspaceId).then(setChannels);
+    const fetchChannels = async () => {
+      const data = await getChannels(token, workspaceId);
 
-    // Listen for real-time channel creation
-    socket?.on("channelCreated", (channel: Channel) => {
-      if (channel.workspaceId === workspaceId) {
-        setChannels((prev) => [...prev, channel]);
+      // Sort alphabetically
+      const sorted = data.sort((a, b) =>
+        a.name.localeCompare(b.name)
+      );
+
+      setChannels(sorted);
+
+      // Auto select first channel if none selected
+      if (sorted.length > 0 && !selectedChannelId) {
+        onSelectChannel(sorted[0]);
       }
-    });
+    };
+
+    fetchChannels();
+  }, [workspaceId, token]);
+
+  // ✅ Listen for real-time channel creation
+  useEffect(() => {
+    if (!socket) return;
+
+    const handleChannelCreated = (channel: Channel) => {
+      if (channel.workspaceId !== workspaceId) return;
+
+      setChannels((prev) => {
+        // Prevent duplicates
+        if (prev.some((c) => c.id === channel.id)) {
+          return prev;
+        }
+
+        const updated = [...prev, channel].sort((a, b) =>
+          a.name.localeCompare(b.name)
+        );
+
+        return updated;
+      });
+
+      setNotification({
+        type: "success",
+        message: `New channel #${channel.name} created`,
+      });
+
+      setTimeout(() => setNotification(null), 3000);
+    };
+
+    socket.on("channelCreated", handleChannelCreated);
 
     return () => {
-      socket?.off("channelCreated");
+      socket.off("channelCreated", handleChannelCreated);
     };
-  }, [workspaceId, token, socket]);
+  }, [socket, workspaceId]);
 
-  // Create channel
+  // Close modal with ESC
+  useEffect(() => {
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setModalOpen(false);
+    };
+
+    if (modalOpen) {
+      document.addEventListener("keydown", handleEscape);
+      return () =>
+        document.removeEventListener("keydown", handleEscape);
+    }
+  }, [modalOpen]);
+
+  // ✅ Create channel (NO SOCKET EMIT)
   const handleCreateChannel = async () => {
     if (!channelName.trim() || !token) return;
 
     setLoading(true);
+
     try {
-      const newChannel = await createChannel(token, {
+      await createChannel(token, {
         name: channelName,
         workspaceId,
       });
 
-      // Optimistic update
-      setChannels((prev) => [...prev, newChannel]);
-      onSelectChannel(newChannel);
-
+      // Backend will emit event automatically
       setChannelName("");
       setModalOpen(false);
 
-      // Emit to others
-      socket?.emit("channelCreated", newChannel);
+      setNotification({
+        type: "success",
+        message: `Channel #${channelName} created`,
+      });
+
+      setTimeout(() => setNotification(null), 3000);
+
     } catch (err: any) {
-      alert(err.response?.data?.message || "Failed to create channel");
+      setNotification({
+        type: "error",
+        message:
+          err.response?.data?.message ||
+          "Failed to create channel",
+      });
     } finally {
       setLoading(false);
     }
   };
 
+  const getChannelInitial = (name: string) =>
+    name.charAt(0).toUpperCase();
+
   return (
-    <div className="bg-gray-100 w-64 p-4 border-r flex flex-col">
-      <div className="flex justify-between items-center mb-4">
-        <h2 className="font-semibold text-lg">Channels</h2>
-        <button
-          onClick={() => setModalOpen(true)}
-          className="text-blue-500 hover:text-blue-700 text-sm"
+    <>
+      {/* Notification */}
+      {notification && (
+        <div
+          className={`fixed top-4 right-4 z-50 flex items-center gap-2 px-4 py-3 rounded-lg shadow-lg ${
+            notification.type === "success"
+              ? "bg-green-500"
+              : "bg-red-500"
+          } text-white`}
         >
-          + Add
-        </button>
-      </div>
-
-      <ul className="space-y-2 flex-1 overflow-y-auto">
-        {channels.map((channel) => (
-          <li
-            key={channel.id}
-            onClick={() => onSelectChannel(channel)}
-            className={`cursor-pointer p-2 rounded transition ${
-              selectedChannelId === channel.id
-                ? "bg-blue-500 text-white"
-                : "hover:bg-gray-200"
-            }`}
-          >
-            #{channel.name}
-          </li>
-        ))}
-      </ul>
-
-      {/* Create Channel Modal */}
-      {modalOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center">
-          <div className="bg-white p-6 rounded w-80 shadow">
-            <h3 className="font-bold mb-3">Create Channel</h3>
-
-            <input
-              type="text"
-              className="border w-full p-2 rounded mb-4"
-              placeholder="Channel name"
-              value={channelName}
-              onChange={(e) => setChannelName(e.target.value)}
-            />
-
-            <div className="flex justify-end space-x-2">
-              <button
-                onClick={handleCreateChannel}
-                disabled={loading}
-                className="bg-blue-500 text-white px-4 py-1 rounded hover:bg-blue-600 disabled:opacity-50"
-              >
-                Create
-              </button>
-              <button
-                onClick={() => setModalOpen(false)}
-                className="px-4 py-1 rounded border hover:bg-gray-100"
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
+          {notification.type === "success" ? (
+            <CheckCircle2 size={18} />
+          ) : (
+            <AlertCircle size={18} />
+          )}
+          <span className="text-sm">
+            {notification.message}
+          </span>
         </div>
       )}
-    </div>
+
+      <div className="bg-white w-72 flex flex-col h-full border-r border-gray-200 shadow-sm">
+        {/* Header */}
+        <div className="p-4 border-b border-gray-200 bg-gray-50">
+          <div
+            className="flex items-center justify-between cursor-pointer"
+            onClick={() => setIsExpanded(!isExpanded)}
+          >
+            <div className="flex items-center gap-2">
+              {isExpanded ? (
+                <ChevronDown size={16} />
+              ) : (
+                <ChevronRight size={16} />
+              )}
+              <h2 className="font-semibold text-gray-700 flex items-center gap-2">
+                <MessageSquare size={16} />
+                Channels
+                <span className="bg-gray-200 px-1.5 py-0.5 rounded-full text-xs">
+                  {channels.length}
+                </span>
+              </h2>
+            </div>
+
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setModalOpen(true);
+              }}
+              className="p-1 hover:bg-gray-200 rounded-lg"
+            >
+              <Plus size={16} />
+            </button>
+          </div>
+        </div>
+
+        {/* Channel List */}
+        {isExpanded && (
+          <div className="flex-1 overflow-y-auto py-2 px-3">
+            {channels.length === 0 ? (
+              <div className="text-center py-8 text-gray-500">
+                No channels yet
+              </div>
+            ) : (
+              <ul className="space-y-1">
+                {channels.map((channel) => (
+                  <li
+                    key={channel.id}
+                    onClick={() => onSelectChannel(channel)}
+                    className={`flex items-center gap-2 px-3 py-2 rounded-lg cursor-pointer ${
+                      selectedChannelId === channel.id
+                        ? "bg-blue-500 text-white"
+                        : "hover:bg-gray-100"
+                    }`}
+                  >
+                    <div className="w-6 h-6 rounded-md bg-gray-200 flex items-center justify-center text-xs font-bold">
+                      {getChannelInitial(channel.name)}
+                    </div>
+                    <span className="flex-1 truncate text-sm">
+                      {channel.name}
+                    </span>
+                    <Hash size={14} />
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
+
+        {/* Create Channel Modal */}
+        {modalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+            <div className="bg-white rounded-xl w-full max-w-md p-6">
+              <h3 className="text-lg font-semibold mb-4">
+                Create Channel
+              </h3>
+
+              <input
+                type="text"
+                className="w-full border p-3 rounded-lg mb-4"
+                placeholder="channel-name"
+                value={channelName}
+                onChange={(e) =>
+                  setChannelName(
+                    e.target.value
+                      .toLowerCase()
+                      .replace(/\s+/g, "-")
+                  )
+                }
+              />
+
+              <div className="flex gap-3">
+                <button
+                  onClick={handleCreateChannel}
+                  disabled={loading}
+                  className="flex-1 bg-blue-600 text-white px-4 py-2 rounded-lg"
+                >
+                  {loading ? (
+                    <Loader2 className="animate-spin" />
+                  ) : (
+                    "Create"
+                  )}
+                </button>
+                <button
+                  onClick={() => setModalOpen(false)}
+                  className="px-4 py-2 border rounded-lg"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </>
   );
 };
 
