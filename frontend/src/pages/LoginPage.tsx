@@ -1,6 +1,6 @@
+import { ArrowRight, LogIn, MessageCircle, ShieldCheck } from "lucide-react";
 import { useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { ArrowRight, LogIn, MessageCircle, ShieldCheck } from "lucide-react";
 import LoginForm from "../components/auth/LoginForm";
 import { useAuth } from "../context/AuthContext";
 
