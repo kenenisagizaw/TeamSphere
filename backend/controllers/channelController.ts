@@ -13,8 +13,7 @@ export const createChannel = async (req: AuthRequest, res: Response) => {
   //  Check user is member of workspace
   const membership = await prisma.workspaceMember.findUnique({
     where: {
-      // Use the correct composite unique key as defined in your Prisma schema
-      // If your schema uses a composite unique constraint, it is usually named like 'userId_workspaceId'
+
       userId_workspaceId: {
         userId: req.user.id,
         workspaceId: Number(workspaceId),
@@ -77,26 +76,19 @@ export const getChannels = async (req: AuthRequest, res: Response) => {
 export const getChannelMessages = async (req: AuthRequest, res: Response) => {
   const { channelId } = req.params;
 
-  if (!req.user) return res.status(401).json({ message: "Unauthorized" });
-
   const messages = await prisma.message.findMany({
     where: { channelId: Number(channelId) },
-    orderBy: { createdAt: "asc" },
-    include: {
-      sender: {
-        select: {
-          id: true,
-          name: true,
-        },
-      },
-    },
+    include: { sender: true },
+    orderBy: { createdAt: 'asc' },
   });
 
-  const result = messages.map((message) => ({
+  const formatted = messages.map((message) => ({
     id: message.id,
     content: message.content,
-    userName: message.sender?.name ?? "Unknown",
+    createdAt: message.createdAt.toISOString(),
+    userName: message.sender.name,
+    userId: message.senderId,
   }));
 
-  res.json(result);
+  res.json(formatted);
 };
