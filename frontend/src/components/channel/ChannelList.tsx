@@ -39,7 +39,7 @@ const ChannelList: React.FC<Props> = ({
     { type: "success" | "error"; message: string } | null
   >(null);
 
-  // ✅ Fetch channels
+  // Fetch channels
   useEffect(() => {
     if (!token) return;
 
@@ -62,7 +62,7 @@ const ChannelList: React.FC<Props> = ({
     fetchChannels();
   }, [workspaceId, token]);
 
-  // ✅ Listen for real-time channel creation
+  // Listen for real-time channel creation
   useEffect(() => {
     if (!socket) return;
 
@@ -97,7 +97,6 @@ const ChannelList: React.FC<Props> = ({
     };
   }, [socket, workspaceId]);
 
-  // Close modal with ESC
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
       if (e.key === "Escape") setModalOpen(false);
@@ -110,7 +109,7 @@ const ChannelList: React.FC<Props> = ({
     }
   }, [modalOpen]);
 
-  // ✅ Create channel (NO SOCKET EMIT)
+  //  Create channel (NO SOCKET EMIT)
   const handleCreateChannel = async () => {
     if (!channelName.trim() || !token) return;
 
