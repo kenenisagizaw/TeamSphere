@@ -18,27 +18,36 @@ export const chatSocket = (io: Server) => {
     });
 
     // Send message
-    socket.on('sendMessage', async (msg: ChatMessage) => {
-      try {
-        // Save to DB
-        const message = await prisma.message.create({
-          data: {
-            content: msg.content,
-            senderId: msg.senderId,
-            channelId: msg.channelId,
-          },
-          include: { sender: true },
-        });
-
-        // Emit to all in the channel
-        io.to(`channel_${msg.channelId}`).emit('receiveMessage', message);
-      } catch (err) {
-        console.error(err);
-      }
+ socket.on('sendMessage', async (msg: ChatMessage) => {
+  try {
+    const message = await prisma.message.create({
+      data: {
+        content: msg.content,
+        senderId: msg.senderId,
+        channelId: msg.channelId,
+      },
+      include: { sender: true },
     });
+
+    const formattedMessage = {
+      id: message.id,
+      content: message.content,
+      createdAt: message.createdAt.toISOString(), 
+      userName: message.sender.name,
+      userId: message.senderId,
+    };
+
+    io.to(`channel_${msg.channelId}`).emit('receiveMessage', formattedMessage);
+  } catch (err) {
+    console.error(err);
+  }
+});
+
+
 
     socket.on('disconnect', () => {
       console.log('Client disconnected', socket.id);
+      
     });
   });
 };
