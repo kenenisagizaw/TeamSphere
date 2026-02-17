@@ -1,6 +1,6 @@
+import { ArrowRight, MessageCircle, ShieldCheck, UserPlus } from "lucide-react";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowRight, MessageCircle, ShieldCheck, UserPlus } from "lucide-react";
 import RegisterForm from "../components/auth/RegisterForm";
 import { useAuth } from "../context/AuthContext";
 
