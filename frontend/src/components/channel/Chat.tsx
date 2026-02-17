@@ -352,17 +352,6 @@ const Chat: React.FC<Props> = ({ channel, onBack }) => {
           </button>
         </div>
 
-        {/* Quick actions */}
-        <div className="flex items-center gap-2 mt-2 text-xs text-gray-400">
-          <span className="flex items-center gap-1">
-            <kbd className="px-1.5 py-0.5 bg-gray-100 rounded text-gray-600 text-xs">Enter</kbd> to send
-          </span>
-          <span>•</span>
-          <span className="flex items-center gap-1">
-            <kbd className="px-1.5 py-0.5 bg-gray-100 rounded text-gray-600 text-xs">Shift</kbd> + 
-            <kbd className="px-1.5 py-0.5 bg-gray-100 rounded text-gray-600 text-xs">Enter</kbd> new line
-          </span>
-        </div>
       </div>
     </div>
   );
