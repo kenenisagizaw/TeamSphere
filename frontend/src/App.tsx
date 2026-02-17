@@ -1,4 +1,4 @@
-import { Navigate, Route, Routes } from "react-router-dom";
+import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import "./App.css";
 import { useAuth } from "./context/AuthContext";
 import Dashboard from "./pages/Dashboard";
@@ -8,7 +8,12 @@ import WorkspacePage from "./pages/WorkspacePage";
 
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   const { token } = useAuth();
-  if (!token) return <Navigate to="/login" replace />;
+  const location = useLocation();
+  if (!token) {
+    return (
+      <Navigate to="/login" replace state={{ from: location.pathname }} />
+    );
+  }
   return <>{children}</>;
 };
 
@@ -23,7 +28,13 @@ function App() {
       />
       <Route
         path="/login"
-        element={token ? <Navigate to="/dashboard" replace /> : <LoginPage />}
+        element={
+          token ? (
+            <Navigate to="/dashboard" replace />
+          ) : (
+            <LoginPage />
+          )
+        }
       />
       <Route
         path="/register"
