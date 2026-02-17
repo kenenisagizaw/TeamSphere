@@ -57,7 +57,8 @@ io.on("connection", (socket) => {
         data: {
           content,
           channelId,
-          senderId: user.id, // 🔥 Comes from verified JWT
+          senderId: user.id, 
+          
         },
         include: { sender: true },
       });
