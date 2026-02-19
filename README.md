@@ -22,11 +22,9 @@ Supports channels, workspaces, file uploads, emojis, typing indicators, and noti
 - Realtime: Socket.IO
 - Database: PostgreSQL (via Prisma ORM)
 - Authentication: JWT
-- File Storage: Local uploads (can integrate S3 later)
+  
+<img width="1919" height="924" alt="image" src="https://github.com/user-attachments/assets/9b6a001b-19e3-4ff6-826c-0d581a106978" />
 
-## Screenshots 📸
-
-(Add your screenshots or GIFs here)
 
 ## Installation 💻
 
