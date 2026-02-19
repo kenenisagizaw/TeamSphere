@@ -3,6 +3,7 @@ import { Server } from "socket.io";
 import jwt from "jsonwebtoken";
 import app from "./app";
 import { prisma } from "./config/prisma";
+import path from "path";
 
 const server = createServer(app);
 
@@ -13,20 +14,17 @@ const io = new Server(server, {
   },
 });
 
-
 // 🔐 SOCKET AUTH MIDDLEWARE
 io.use((socket, next) => {
   try {
     const token = socket.handshake.auth.token;
 
-    if (!token) {
-      return next(new Error("Authentication error"));
-    }
+    if (!token) return next(new Error("Authentication error"));
 
-    const decoded = jwt.verify(
-      token,
-      process.env.JWT_SECRET!
-    ) as { id: number; email: string };
+    const decoded = jwt.verify(token, process.env.JWT_SECRET!) as {
+      id: number;
+      email: string;
+    };
 
     // Attach user to socket
     (socket as any).user = decoded;
@@ -37,59 +35,111 @@ io.use((socket, next) => {
   }
 });
 
-
 io.on("connection", (socket) => {
   const user = (socket as any).user;
-
   console.log("Authenticated user connected:", user.id);
 
   // Join channel
   socket.on("joinChannel", (channelId: number) => {
     socket.join(`channel_${channelId}`);
+    console.log(`User ${user.id} joined channel ${channelId}`);
   });
 
-  // 🔐 Secure message sending
-  socket.on("sendMessage", async ({ channelId, content }) => {
-    if (!content) return;
+  // Typing indicators
+  socket.on("typing", (data: { channelId: number; userName: string }) => {
+    socket.to(`channel_${data.channelId}`).emit("userTyping", {
+      userId: user.id,
+      userName: data.userName,
+    });
+  });
 
-    try {
-      const message = await prisma.message.create({
-        data: {
-          content,
-          channelId,
-          senderId: user.id, 
-          
-        },
-        include: { sender: true },
-      });
+  socket.on("stoppedTyping", (data: { channelId: number }) => {
+    socket.to(`channel_${data.channelId}`).emit("userStoppedTyping", {
+      userId: user.id,
+      userName: (socket as any).user.email,
+    });
+  });
 
-      const outgoing = {
-        id: message.id,
-        content: message.content,
-        userName: message.sender.name,
-        createdAt: message.createdAt,
-      };
+  // 🔐 Send text or emoji messages
+  socket.on(
+    "sendMessage",
+    async (msg: {
+      channelId: number;
+      content?: string;
+      emoji?: string;
+      fileUrl?: string;
+    }) => {
+      if (!msg.content && !msg.emoji && !msg.fileUrl) return;
 
-      io.to(`channel_${channelId}`).emit("receiveMessage", outgoing);
-    } catch (error) {
-      console.error("Message error:", error);
+      try {
+        const message = await prisma.message.create({
+          data: {
+            content: msg.content || msg.emoji || "",
+            fileUrl: msg.fileUrl || null,
+            senderId: user.id,
+            channelId: msg.channelId,
+          },
+          include: { sender: true },
+        });
+
+        const outgoing = {
+          id: message.id,
+          content: message.content,
+          fileUrl: message.fileUrl,
+          userName: message.sender.name,
+          createdAt: message.createdAt.toISOString(),
+        };
+
+        io.to(`channel_${msg.channelId}`).emit("receiveMessage", outgoing);
+      } catch (error) {
+        console.error("Message error:", error);
+      }
     }
-  });
+  );
+
+  // 🔗 Send files
+  socket.on(
+    "sendFile",
+    async (data: {
+      channelId: number;
+      fileName: string;
+      fileType: string;
+      fileUrl: string;
+    }) => {
+      try {
+        const message = await prisma.message.create({
+          data: {
+            content: "",
+            fileUrl: data.fileUrl,
+            senderId: user.id,
+            channelId: data.channelId,
+          },
+          include: { sender: true },
+        });
+
+        io.to(`channel_${data.channelId}`).emit("receiveMessage", {
+          id: message.id,
+          content: "",
+          fileUrl: message.fileUrl,
+          userName: message.sender.name,
+          createdAt: message.createdAt.toISOString(),
+        });
+      } catch (error) {
+        console.error("File send error:", error);
+      }
+    }
+  );
 
   // Channel created
   socket.on("channelCreated", (channel) => {
-    io.to(`workspace_${channel.workspaceId}`).emit(
-      "channelCreated",
-      channel
-    );
+    io.to(`workspace_${channel.workspaceId}`).emit("channelCreated", channel);
   });
 
+  // Disconnect
   socket.on("disconnect", () => {
     console.log("User disconnected:", user.id);
   });
 });
 
 const PORT = process.env.PORT || 5000;
-server.listen(PORT, () =>
-  console.log(`Server running on port ${PORT}`)
-);
+server.listen(PORT, () => console.log(`Server running on port ${PORT}`));
