@@ -206,6 +206,12 @@ const Chat: React.FC<Props> = ({ channel, onBack }) => {
     return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
 
+  const resolveFileUrl = (fileUrl: string) =>
+    fileUrl.startsWith("http") ? fileUrl : `http://localhost:5000${fileUrl}`;
+
+  const isImageFile = (fileUrl: string) =>
+    fileUrl.split("?")[0].match(/\.(jpeg|jpg|gif|png|webp)$/i);
+
   const groupMessagesByDate = (messages: Message[]) => {
     const groups: { [key: string]: Message[] } = {};
     messages.forEach(msg => {
@@ -344,12 +350,12 @@ const Chat: React.FC<Props> = ({ channel, onBack }) => {
                         ${isCurrentUser ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-br-none' : 'bg-white border border-gray-200 text-gray-800 rounded-bl-none shadow-sm'}
                       `}>
                         {msg.fileUrl ? (
-                          msg.fileUrl.match(/\.(jpeg|jpg|gif|png|webp)$/i) ? (
+                          isImageFile(msg.fileUrl) ? (
                             <button
                               type="button"
                               onClick={() =>
                                 window.open(
-                                  `http://localhost:5000${msg.fileUrl}`,
+                                  resolveFileUrl(msg.fileUrl),
                                   "_blank",
                                   "noopener,noreferrer"
                                 )
@@ -357,14 +363,14 @@ const Chat: React.FC<Props> = ({ channel, onBack }) => {
                               className="block"
                             >
                               <img
-                                src={`http://localhost:5000${msg.fileUrl}`}
+                                src={resolveFileUrl(msg.fileUrl)}
                                 alt="uploaded"
                                 className="max-w-xs rounded-lg"
                               />
                             </button>
                           ) : (
                             <a
-                              href={`http://localhost:5000${msg.fileUrl}`}
+                              href={resolveFileUrl(msg.fileUrl)}
                               target="_blank"
                               rel="noopener noreferrer"
                               className="underline"
