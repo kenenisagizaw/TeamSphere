@@ -1,11 +1,11 @@
 import cors from "cors";
 import "dotenv/config";
 import express from "express";
+import path from "path";
 import authRoutes from "./routes/authRoutes";
 import channelRoutes from "./routes/channelRoutes";
-import workspaceRoutes from "./routes/workspaceRoutes";
 import uploadRoutes from "./routes/uploadRoutes";
-import path from "path";
+import workspaceRoutes from "./routes/workspaceRoutes";
 const app = express();
 
 app.use(cors({ origin: "http://localhost:5173", credentials: true }));
