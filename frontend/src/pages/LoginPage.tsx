@@ -47,12 +47,6 @@ const LoginPage = () => {
               Pick up where you left off. Your channels and workspaces are ready.
             </p>
           </div>
-          <div className="bg-white/10 rounded-xl p-4">
-            <div className="flex items-center gap-2 text-blue-100">
-              <ShieldCheck size={18} />
-              <span className="text-sm">Secure access with token-based auth</span>
-            </div>
-          </div>
         </div>
 
         <div className="w-full lg:w-1/2 p-8 md:p-12">
