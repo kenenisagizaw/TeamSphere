@@ -55,11 +55,15 @@ model Channel {
 }
 
 model Message {
-  id        Int       @id @default(autoincrement())
-  content   String
+  id        Int      @id @default(autoincrement())
+  content   String?
+  fileUrl   String?
+  fileName  String?
+  fileType  String?
+  createdAt DateTime @default(now())
+
   senderId  Int
   channelId Int
-  createdAt DateTime  @default(now())
 
   sender    User     @relation(fields: [senderId], references: [id])
   channel   Channel  @relation(fields: [channelId], references: [id])
