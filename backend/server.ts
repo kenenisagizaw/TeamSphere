@@ -1,9 +1,8 @@
 import { createServer } from "http";
-import { Server } from "socket.io";
 import jwt from "jsonwebtoken";
+import { Server } from "socket.io";
 import app from "./app";
 import { prisma } from "./config/prisma";
-import path from "path";
 
 const server = createServer(app);
 
