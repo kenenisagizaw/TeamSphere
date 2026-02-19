@@ -1,21 +1,15 @@
+import {
+    FolderPlus,
+    Grid,
+    LogOut,
+    Plus,
+    Users,
+    X
+} from "lucide-react";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { createWorkspace, getWorkspaces, joinWorkspace } from "../api";
 import { useAuth } from "../context/AuthContext";
-import {
-  Plus,
-  LogIn,
-  ArrowRight,
-  X,
-  Loader2,
-  Grid,
-  Users,
-  Sparkles,
-  FolderPlus,
-  CheckCircle2,
-  AlertCircle,
-  LogOut,
-} from "lucide-react";
 
 interface Workspace {
   id: number;
