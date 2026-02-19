@@ -223,9 +223,6 @@ const RegisterForm: React.FC<RegisterFormProps> = ({ onSubmit, loading }) => {
         )}
       </motion.button>
 
-      <p className="text-xs text-center text-gray-400 mt-4">
-        Secured with 256-bit encryption
-      </p>
     </form>
   );
 };
