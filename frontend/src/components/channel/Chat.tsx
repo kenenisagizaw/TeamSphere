@@ -1,3 +1,5 @@
+import type { EmojiClickData } from "emoji-picker-react";
+import EmojiPicker from "emoji-picker-react";
 import {
   ArrowLeft,
   CheckCheck,
@@ -22,6 +24,7 @@ interface Message {
   userName: string;
   createdAt: string;
   userId?: number;
+  fileUrl?: string;
 }
 
 interface Props {
@@ -34,11 +37,17 @@ const Chat: React.FC<Props> = ({ channel, onBack }) => {
   const socket = useSocket();
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
+  const [pendingFile, setPendingFile] = useState<File | null>(null);
+  const [pendingFilePreview, setPendingFilePreview] = useState<string | null>(null);
+  const [uploadingFile, setUploadingFile] = useState(false);
   const [isTyping, setIsTyping] = useState(false);
   const [typingUsers, setTypingUsers] = useState<Set<string>>(new Set());
   const [messageLoading, setMessageLoading] = useState(true);
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -48,7 +57,7 @@ const Chat: React.FC<Props> = ({ channel, onBack }) => {
     setMessages([]);
     setTypingUsers(new Set());
 
-    // Fetch existing messages
+    // Fetch messages
     api
       .get<Message[]>(`/channels/${channel.id}/messages`, {
         headers: { Authorization: `Bearer ${token}` },
@@ -59,7 +68,7 @@ const Chat: React.FC<Props> = ({ channel, onBack }) => {
       })
       .catch(() => setMessageLoading(false));
 
-    // Join channel room
+    // Join socket room
     socket?.emit("joinChannel", channel.id);
 
     // Listen for new messages
@@ -67,11 +76,9 @@ const Chat: React.FC<Props> = ({ channel, onBack }) => {
       if (msg) setMessages((prev) => [...prev, msg]);
     });
 
-    // Listen for typing events
+    // Typing indicators
     socket?.on("userTyping", ({ userId, userName }: { userId: number; userName: string }) => {
-      if (userId !== user?.id) {
-        setTypingUsers((prev) => new Set(prev).add(userName));
-      }
+      if (userId !== user?.id) setTypingUsers((prev) => new Set(prev).add(userName));
     });
 
     socket?.on("userStoppedTyping", ({ userId, userName }: { userId: number; userName: string }) => {
@@ -95,15 +102,15 @@ const Chat: React.FC<Props> = ({ channel, onBack }) => {
   }, [messages]);
 
   const handleSend = () => {
-    if (!input.trim() || !channel || !user) return;
-    
+    if (!channel || !user || (!input.trim())) return;
+
     socket?.emit("sendMessage", { 
       channelId: channel.id, 
+      senderId: user.id, 
       content: input.trim(), 
-      senderId: user.id,
       userName: user.name || user.email 
     });
-    
+
     setInput("");
     setIsTyping(false);
     socket?.emit("stoppedTyping", { channelId: channel.id, userId: user.id });
@@ -119,22 +126,79 @@ const Chat: React.FC<Props> = ({ channel, onBack }) => {
 
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setInput(e.target.value);
-    
+
     if (!channel || !user) return;
-    
+
     if (!isTyping && e.target.value) {
       setIsTyping(true);
       socket?.emit("typing", { channelId: channel.id, userId: user.id, userName: user.name || user.email });
     }
-    
+
     if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
-    
+
     typingTimeoutRef.current = setTimeout(() => {
       if (isTyping) {
         setIsTyping(false);
         socket?.emit("stoppedTyping", { channelId: channel.id, userId: user.id });
       }
     }, 2000);
+  };
+
+  const handleEmojiClick = (emojiData: EmojiClickData) => {
+    setInput((prev) => prev + emojiData.emoji);
+    inputRef.current?.focus();
+  };
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setPendingFile(file);
+    if (file.type.startsWith("image/")) {
+      const previewUrl = URL.createObjectURL(file);
+      setPendingFilePreview(previewUrl);
+    } else {
+      setPendingFilePreview(null);
+    }
+  };
+
+  const clearPendingFile = () => {
+    if (pendingFilePreview) URL.revokeObjectURL(pendingFilePreview);
+    setPendingFile(null);
+    setPendingFilePreview(null);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  const handleSendFile = async () => {
+    if (!pendingFile || !channel || !user) return;
+
+    const formData = new FormData();
+    formData.append("file", pendingFile);
+    formData.append("channelId", String(channel.id));
+    formData.append("senderId", String(user.id));
+
+    try {
+      setUploadingFile(true);
+      const res = await api.post("/upload", formData, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "multipart/form-data",
+        },
+      });
+
+      socket?.emit("sendMessage", {
+        channelId: channel.id,
+        senderId: user.id,
+        content: "",
+        fileUrl: res.data.fileUrl,
+        userName: user.name || user.email,
+      });
+      clearPendingFile();
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setUploadingFile(false);
+    }
   };
 
   const formatTime = (timestamp: string) => {
@@ -274,15 +338,45 @@ const Chat: React.FC<Props> = ({ channel, onBack }) => {
                           <span className="font-semibold text-sm text-gray-800">{msg.userName}</span>
                         </div>
                       )}
-                      
+
                       <div className={`
                         inline-block px-4 py-2 rounded-2xl text-sm
                         ${isCurrentUser ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-br-none' : 'bg-white border border-gray-200 text-gray-800 rounded-bl-none shadow-sm'}
                       `}>
-                        {msg.content}
+                        {msg.fileUrl ? (
+                          msg.fileUrl.match(/\.(jpeg|jpg|gif|png|webp)$/i) ? (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                window.open(
+                                  `http://localhost:5000${msg.fileUrl}`,
+                                  "_blank",
+                                  "noopener,noreferrer"
+                                )
+                              }
+                              className="block"
+                            >
+                              <img
+                                src={`http://localhost:5000${msg.fileUrl}`}
+                                alt="uploaded"
+                                className="max-w-xs rounded-lg"
+                              />
+                            </button>
+                          ) : (
+                            <a
+                              href={`http://localhost:5000${msg.fileUrl}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="underline"
+                            >
+                              📎 Download file
+                            </a>
+                          )
+                        ) : (
+                          msg.content
+                        )}
                       </div>
 
-                      {/* ALWAYS SHOW TIME */}
                       <div className={`text-[10px] opacity-70 mt-1 flex ${isCurrentUser ? 'justify-end' : 'justify-start'}`}>
                         {formatTime(msg.createdAt)}
                       </div>
@@ -315,7 +409,60 @@ const Chat: React.FC<Props> = ({ channel, onBack }) => {
       </div>
 
       {/* Input Area */}
-      <div className="bg-white border-t border-gray-200 px-6 py-4">
+      <div className="bg-white border-t border-gray-200 px-6 py-4 relative">
+        {showEmojiPicker && (
+          <div className="absolute bottom-16 right-6 z-50 shadow-lg">
+            <EmojiPicker onEmojiClick={handleEmojiClick} />
+          </div>
+        )}
+
+        <input type="file" ref={fileInputRef} className="hidden" onChange={handleFileSelect} />
+
+        {pendingFile && (
+          <div className="mb-4 bg-gray-50 border border-gray-200 rounded-xl p-4 flex items-center gap-4">
+            {pendingFilePreview ? (
+              <img
+                src={pendingFilePreview}
+                alt={pendingFile.name}
+                className="w-16 h-16 rounded-lg object-cover border"
+              />
+            ) : (
+              <div className="w-16 h-16 rounded-lg bg-white border flex items-center justify-center text-xs text-gray-500">
+                FILE
+              </div>
+            )}
+            <div className="flex-1">
+              <div className="text-sm font-medium text-gray-800 truncate">
+                {pendingFile.name}
+              </div>
+              <div className="text-xs text-gray-500">
+                {(pendingFile.size / 1024).toFixed(1)} KB
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={clearPendingFile}
+                className="px-3 py-2 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-100 text-sm"
+              >
+                Remove
+              </button>
+              <button
+                type="button"
+                onClick={handleSendFile}
+                disabled={uploadingFile}
+                className={
+                  uploadingFile
+                    ? "px-3 py-2 rounded-lg bg-blue-300 text-white text-sm"
+                    : "px-3 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm"
+                }
+              >
+                {uploadingFile ? "Sending..." : "Send file"}
+              </button>
+            </div>
+          </div>
+        )}
+
         <div className="flex items-end gap-2">
           <div className="flex-1 relative">
             <textarea
@@ -328,15 +475,18 @@ const Chat: React.FC<Props> = ({ channel, onBack }) => {
               onKeyDown={handleKeyPress}
               style={{ minHeight: '44px', maxHeight: '120px' }}
             />
+
             <div className="absolute right-2 bottom-2 flex items-center gap-1">
-              <button className="p-2 hover:bg-gray-200 rounded-lg transition-colors" title="Attach file">
+              <button type="button" onClick={() => fileInputRef.current?.click()} className="p-2 hover:bg-gray-200 rounded-lg transition-colors" title="Attach file">
                 <Paperclip size={18} className="text-gray-500" />
               </button>
-              <button className="p-2 hover:bg-gray-200 rounded-lg transition-colors" title="Add emoji">
+
+              <button type="button" onClick={() => setShowEmojiPicker((prev) => !prev)} className="p-2 hover:bg-gray-200 rounded-lg transition-colors" title="Add emoji">
                 <Smile size={18} className="text-gray-500" />
               </button>
             </div>
           </div>
+
           <button
             onClick={handleSend}
             disabled={!input.trim()}
@@ -351,7 +501,6 @@ const Chat: React.FC<Props> = ({ channel, onBack }) => {
             <Send size={18} />
           </button>
         </div>
-
       </div>
     </div>
   );
