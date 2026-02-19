@@ -1,4 +1,4 @@
-import { ArrowRight, LogIn, MessageCircle, ShieldCheck } from "lucide-react";
+import { ArrowRight, LogIn, MessageCircle } from "lucide-react";
 import { useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import LoginForm from "../components/auth/LoginForm";
@@ -40,7 +40,7 @@ const LoginPage = () => {
               <div className="bg-white/15 p-2.5 rounded-lg">
                 <MessageCircle size={26} className="text-white" />
               </div>
-              <span className="text-2xl font-bold">ChatSpace</span>
+              <span className="text-2xl font-bold">TeamSphere</span>
             </div>
             <h1 className="text-4xl font-bold mb-4">Welcome back</h1>
             <p className="text-blue-100 text-lg">
@@ -54,7 +54,7 @@ const LoginPage = () => {
             <div className="bg-linear-to-r from-blue-600 to-indigo-600 p-2 rounded-lg">
               <MessageCircle className="text-white" size={24} />
             </div>
-            <span className="text-xl font-bold text-gray-800">ChatSpace</span>
+            <span className="text-xl font-bold text-gray-800">TeamSphere</span>
           </div>
 
           <div className="mb-8">
