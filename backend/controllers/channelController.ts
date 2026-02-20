@@ -82,14 +82,16 @@ export const getChannelMessages = async (req: AuthRequest, res: Response) => {
     orderBy: { createdAt: 'asc' },
   });
 
-  const formatted = messages.map((message) => ({
-    id: message.id,
-    content: message.content,
-    fileUrl: message.fileUrl,
-    createdAt: message.createdAt.toISOString(),
-    userName: message.sender.name,
-    userId: message.senderId,
-  }));
+    const formatted = messages.map((message) => ({
+      id: message.id,
+      content: message.content,
+      fileUrl: message.fileUrl,
+      fileName: message.fileName,
+      fileType: message.fileType,
+      createdAt: message.createdAt.toISOString(),
+      userName: message.sender.name,
+      userId: message.senderId,
+    }));
 
   res.json(formatted);
 };
