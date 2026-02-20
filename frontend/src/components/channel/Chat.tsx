@@ -253,7 +253,9 @@ const Chat: React.FC<Props> = ({ channel, onBack }) => {
   const messageGroups = groupMessagesByDate(messages);
   const typingUsersList = Array.from(typingUsers);
 
-
+  /* ================================
+     NO CHANNEL
+  ================================== */
 
   if (!channel) {
     return (
