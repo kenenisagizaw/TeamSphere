@@ -24,6 +24,8 @@ interface Message {
   createdAt: string;
   userId?: number;
   fileUrl?: string;
+  fileName?: string;
+  fileType?: string;
 }
 
 interface Props {
@@ -195,7 +197,7 @@ const Chat: React.FC<Props> = ({ channel, onBack }) => {
 
     try {
       setUploadingFile(true);
-      const res = await api.post("/upload", formData, {
+      const res = await api.post("/uploads", formData, {
         headers: {
           Authorization: `Bearer ${token}`,
           "Content-Type": "multipart/form-data",
@@ -207,6 +209,8 @@ const Chat: React.FC<Props> = ({ channel, onBack }) => {
         senderId: user.id,
         content: "",
         fileUrl: res.data.fileUrl,
+        fileName: pendingFile.name,
+        fileType: pendingFile.type,
         userName: user.name || user.email,
       });
 
@@ -344,10 +348,10 @@ const Chat: React.FC<Props> = ({ channel, onBack }) => {
                       }`}
                     >
                       {msg.fileUrl ? (
-                        isImageFile(msg.fileUrl) ? (
+                        isImageFile(msg.fileUrl) || msg.fileType?.startsWith("image/") ? (
                           <img
                             src={resolveFileUrl(msg.fileUrl)}
-                            alt="uploaded"
+                            alt={msg.fileName ?? "uploaded"}
                             className="rounded-lg max-w-xs"
                           />
                         ) : (
@@ -357,7 +361,7 @@ const Chat: React.FC<Props> = ({ channel, onBack }) => {
                             rel="noopener noreferrer"
                             className="underline"
                           >
-                            📎 Download file
+                            📎 {msg.fileName ?? "Download file"}
                           </a>
                         )
                       ) : (
