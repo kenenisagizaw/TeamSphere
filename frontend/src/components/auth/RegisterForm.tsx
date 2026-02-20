@@ -1,230 +1,349 @@
-import React, { useState } from "react";
-import { motion } from "framer-motion";
-import { User, Mail, Lock, Eye, EyeOff, CheckCircle, AlertCircle } from "lucide-react";
+import EmojiPicker from "emoji-picker-react";
+import {
+  ArrowLeft,
+  CheckCheck,
+  Hash,
+  Info,
+  MessageCircle,
+  MoreVertical,
+  Paperclip,
+  Send,
+  Smile,
+  X
+} from "lucide-react";
+import React, { useEffect, useRef, useState } from "react";
+import type { Channel } from "../../api";
+import api from "../../api";
+import { useAuth } from "../../context/AuthContext";
+import { useSocket } from "../../context/SocketContext";
 
-interface RegisterFormProps {
-  onSubmit: (data: { name: string; email: string; password: string }) => void;
-  loading: boolean;
+interface Message {
+  id: number;
+  content: string;
+  userName: string;
+  createdAt: string;
+  userId?: number;
+  fileUrl?: string;
 }
 
-const RegisterForm: React.FC<RegisterFormProps> = ({ onSubmit, loading }) => {
-  const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
-  const [showConfirm, setShowConfirm] = useState(false);
-  const [errors, setErrors] = useState<{ name?: string; email?: string; password?: string; confirmPassword?: string }>({});
+interface Props {
+  channel: Channel | null;
+  onBack?: () => void;
+}
 
-  const validateForm = () => {
-    const newErrors: typeof errors = {};
+const Chat: React.FC<Props> = ({ channel, onBack }) => {
+  const { token, user } = useAuth();
+  const socket = useSocket();
 
-    if (!name.trim()) newErrors.name = "Full name is required";
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [input, setInput] = useState("");
+  const [pendingFile, setPendingFile] = useState<File | null>(null);
+  const [pendingFilePreview, setPendingFilePreview] = useState<string | null>(null);
+  const [uploadingFile, setUploadingFile] = useState(false);
+  const [isTyping, setIsTyping] = useState(false);
+  const [typingUsers, setTypingUsers] = useState<Set<string>>(new Set());
+  const [messageLoading, setMessageLoading] = useState(true);
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [imageModal, setImageModal] = useState<string | null>(null);
 
-    if (!email.trim()) newErrors.email = "Email is required";
-    else if (!/\S+@\S+\.\S+/.test(email)) newErrors.email = "Invalid email format";
+  const bottomRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-    if (!password) newErrors.password = "Password is required";
-    else if (password.length < 6) newErrors.password = "Password must be at least 6 characters";
+  /* ===============================
+     SOCKET & FETCH
+  ================================= */
 
-    if (!confirmPassword) newErrors.confirmPassword = "Confirm your password";
-    else if (password !== confirmPassword) newErrors.confirmPassword = "Passwords do not match";
+  useEffect(() => {
+    if (!channel || !token) return;
 
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
+    setMessageLoading(true);
+    setMessages([]);
+    setTypingUsers(new Set());
+
+    api.get<Message[]>(`/channels/${channel.id}/messages`, {
+      headers: { Authorization: `Bearer ${token}` },
+    }).then(res => {
+      setMessages(res.data);
+      setMessageLoading(false);
+    }).catch(() => setMessageLoading(false));
+
+    socket?.emit("joinChannel", channel.id);
+
+    socket?.on("receiveMessage", (msg: Message) => {
+      if (msg) setMessages(prev => [...prev, msg]);
+    });
+
+    socket?.on("userTyping", ({ userId, userName }: any) => {
+      if (userId !== user?.id) setTypingUsers(prev => new Set(prev).add(userName));
+    });
+
+    socket?.on("userStoppedTyping", ({ userName }: any) => {
+      setTypingUsers(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(userName);
+        return newSet;
+      });
+    });
+
+    return () => {
+      socket?.off("receiveMessage");
+      socket?.off("userTyping");
+      socket?.off("userStoppedTyping");
+      if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+    };
+  }, [channel, token, socket, user?.id]);
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
+
+  /* ===============================
+     MESSAGE SEND
+  ================================= */
+
+  const handleSend = () => {
+    if (!channel || !user || (!input.trim() && !pendingFile)) return;
+
+    if (pendingFile) {
+      handleSendFile();
+      return;
+    }
+
+    socket?.emit("sendMessage", {
+      channelId: channel.id,
+      senderId: user.id,
+      content: input.trim(),
+      userName: user.name || user.email,
+    });
+
+    setInput("");
+    setIsTyping(false);
+    socket?.emit("stoppedTyping", { channelId: channel.id, userId: user.id });
+    inputRef.current?.focus();
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (validateForm()) {
-      onSubmit({ name: name.trim(), email: email.trim(), password });
+  const handleKeyPress = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      handleSend();
     }
   };
 
-  const inputClasses = (hasError: boolean) =>
-    `w-full pl-10 pr-10 py-2.5 border rounded-lg outline-none transition-all ${
-      hasError ? 'border-red-300 focus:ring-2 focus:ring-red-200' : 'border-gray-200 focus:ring-2 focus:ring-blue-200 focus:border-blue-500'
-    }`;
+  const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setInput(e.target.value);
+    if (!channel || !user) return;
+
+    if (!isTyping && e.target.value) {
+      setIsTyping(true);
+      socket?.emit("typing", { channelId: channel.id, userId: user.id, userName: user.name || user.email });
+    }
+
+    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+
+    typingTimeoutRef.current = setTimeout(() => {
+      if (isTyping) {
+        setIsTyping(false);
+        socket?.emit("stoppedTyping", { channelId: channel.id, userId: user.id });
+      }
+    }, 2000);
+  };
+
+  /* ===============================
+     FILE HANDLING
+  ================================= */
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setPendingFile(file);
+    if (file.type.startsWith("image/")) {
+      setPendingFilePreview(URL.createObjectURL(file));
+    } else {
+      setPendingFilePreview(null);
+    }
+  };
+
+  const clearPendingFile = () => {
+    if (pendingFilePreview) URL.revokeObjectURL(pendingFilePreview);
+    setPendingFile(null);
+    setPendingFilePreview(null);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  const handleSendFile = async () => {
+    if (!pendingFile || !channel || !user) return;
+
+    const formData = new FormData();
+    formData.append("file", pendingFile);
+    formData.append("channelId", String(channel.id));
+    formData.append("senderId", String(user.id));
+
+    try {
+      setUploadingFile(true);
+      const res = await api.post("/upload", formData, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "multipart/form-data",
+        },
+      });
+
+      socket?.emit("sendMessage", {
+        channelId: channel.id,
+        senderId: user.id,
+        content: "",
+        fileUrl: res.data.fileUrl,
+        userName: user.name || user.email,
+      });
+
+      clearPendingFile();
+    } finally {
+      setUploadingFile(false);
+    }
+  };
+
+  /* ===============================
+     HELPERS
+  ================================= */
+
+  const formatTime = (timestamp: string) => new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const resolveFileUrl = (fileUrl: string) => fileUrl.startsWith("http") ? fileUrl : `http://localhost:5000${fileUrl}`;
+  const isImageFile = (fileUrl: string) => fileUrl.split("?")[0].match(/\.(jpeg|jpg|gif|png|webp)$/i);
+  const groupMessagesByDate = (messages: Message[]) => {
+    const groups: { [key: string]: Message[] } = {};
+    messages.forEach(msg => {
+      const date = new Date(msg.createdAt).toDateString();
+      if (!groups[date]) groups[date] = [];
+      groups[date].push(msg);
+    });
+    return groups;
+  };
+  const messageGroups = groupMessagesByDate(messages);
+  const typingUsersList = Array.from(typingUsers);
+
+  /* ===============================
+     RENDER
+  ================================= */
+
+  if (!channel) return (
+    <div className="flex-1 flex items-center justify-center bg-gray-50">
+      <div className="text-center">
+        <MessageCircle size={32} className="mx-auto text-gray-400 mb-3" />
+        <p className="text-gray-600 text-sm">Select a channel to start chatting</p>
+      </div>
+    </div>
+  );
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-5">
-      {/* Name Field */}
-      <div>
-        <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-1.5">
-          Full Name
-        </label>
-        <div className="relative">
-          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-            <User size={18} className="text-gray-400" />
+    <div className="flex-1 flex flex-col h-full bg-white">
+
+      {/* HEADER */}
+      <div className="border-b px-6 py-4 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          {onBack && <button onClick={onBack} className="lg:hidden p-2 hover:bg-gray-100 rounded-lg"><ArrowLeft size={18}/></button>}
+          <div className="w-9 h-9 bg-blue-100 rounded-lg flex items-center justify-center"><Hash size={18} className="text-blue-600"/></div>
+          <div>
+            <h2 className="text-sm font-semibold text-gray-900">{channel.name}</h2>
+            <p className="text-xs text-gray-500">{messages.length} messages</p>
           </div>
-          <input
-            id="name"
-            type="text"
-            value={name}
-            onChange={(e) => {
-              setName(e.target.value);
-              if (errors.name) setErrors({ ...errors, name: undefined });
-            }}
-            className={inputClasses(!!errors.name)}
-            placeholder="John Doe"
-            disabled={loading}
-          />
         </div>
-        {errors.name && (
-          <motion.p
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="mt-1.5 text-xs text-red-500 flex items-center gap-1"
-          >
-            <AlertCircle size={12} />
-            {errors.name}
-          </motion.p>
-        )}
+        <div className="flex items-center gap-2">
+          <button className="p-2 hover:bg-gray-100 rounded-lg"><Info size={18}/></button>
+          <button className="p-2 hover:bg-gray-100 rounded-lg"><MoreVertical size={18}/></button>
+        </div>
       </div>
 
-      {/* Email Field */}
-      <div>
-        <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1.5">
-          Email Address
-        </label>
-        <div className="relative">
-          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-            <Mail size={18} className="text-gray-400" />
+      {/* MESSAGES */}
+      <div className="flex-1 overflow-y-auto px-6 py-6 bg-gray-50">
+        {Object.entries(messageGroups).map(([date, msgs]) => (
+          <div key={date} className="mb-6">
+            <div className="text-center text-xs text-gray-400 mb-4">{new Date(date).toLocaleDateString()}</div>
+            {msgs.map(msg => {
+              const isCurrentUser = msg.userName === (user?.name || user?.email);
+              return (
+                <div key={msg.id} className={`flex mb-4 ${isCurrentUser ? "justify-end" : "justify-start"}`}>
+                  <div className="max-w-[70%]">
+                    {!isCurrentUser && <p className="text-xs text-gray-500 mb-1">{msg.userName}</p>}
+                    <div className={`px-4 py-2 text-sm rounded-2xl ${isCurrentUser ? "bg-blue-600 text-white rounded-br-none" : "bg-white border border-gray-200 text-gray-800 rounded-bl-none"}`}>
+                      {msg.fileUrl ? (
+                        isImageFile(msg.fileUrl) ? (
+                          <img
+                            src={resolveFileUrl(msg.fileUrl)}
+                            alt="uploaded"
+                            className="rounded-lg max-w-xs cursor-pointer hover:opacity-80"
+                            onClick={() => msg.fileUrl && setImageModal(resolveFileUrl(msg.fileUrl))}
+                          />
+                        ) : (
+                          <a href={resolveFileUrl(msg.fileUrl)} target="_blank" rel="noopener noreferrer" className="underline">📎 Download file</a>
+                        )
+                      ) : msg.content}
+                    </div>
+                    <p className={`text-[10px] text-gray-400 mt-1 ${isCurrentUser ? "text-right" : "text-left"}`}>
+                      {formatTime(msg.createdAt)}
+                      {isCurrentUser && <CheckCheck size={12} className="inline ml-1"/>}
+                    </p>
+                  </div>
+                </div>
+              );
+            })}
           </div>
-          <input
-            id="email"
-            type="email"
-            value={email}
-            onChange={(e) => {
-              setEmail(e.target.value);
-              if (errors.email) setErrors({ ...errors, email: undefined });
-            }}
-            className={inputClasses(!!errors.email)}
-            placeholder="you@example.com"
-            disabled={loading}
-          />
-        </div>
-        {errors.email && (
-          <motion.p
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="mt-1.5 text-xs text-red-500 flex items-center gap-1"
-          >
-            <AlertCircle size={12} />
-            {errors.email}
-          </motion.p>
-        )}
+        ))}
+
+        {typingUsersList.length > 0 && <div className="text-sm text-gray-500 italic">{typingUsersList.join(", ")} typing...</div>}
+        <div ref={bottomRef}/>
       </div>
 
-      {/* Password Field */}
-      <div>
-        <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1.5">
-          Password
-        </label>
-        <div className="relative">
-          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-            <Lock size={18} className="text-gray-400" />
-          </div>
-          <input
-            id="password"
-            type={showPassword ? "text" : "password"}
-            value={password}
-            onChange={(e) => {
-              setPassword(e.target.value);
-              if (errors.password) setErrors({ ...errors, password: undefined });
-            }}
-            className={inputClasses(!!errors.password)}
-            placeholder="••••••••"
-            disabled={loading}
-          />
-          <button
-            type="button"
-            onClick={() => setShowPassword(!showPassword)}
-            className="absolute inset-y-0 right-0 pr-3 flex items-center"
-          >
-            {showPassword ? <EyeOff size={18} className="text-gray-400 hover:text-gray-600" /> : <Eye size={18} className="text-gray-400 hover:text-gray-600" />}
-          </button>
+      {/* IMAGE MODAL */}
+      {imageModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50">
+          <button className="absolute top-6 right-6 text-white p-2" onClick={() => setImageModal(null)}><X size={24}/></button>
+          <img src={imageModal} alt="preview" className="max-h-[80%] max-w-[90%] rounded-lg shadow-lg"/>
         </div>
-        {errors.password && (
-          <motion.p
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="mt-1.5 text-xs text-red-500 flex items-center gap-1"
-          >
-            <AlertCircle size={12} />
-            {errors.password}
-          </motion.p>
-        )}
-      </div>
+      )}
 
-      {/* Confirm Password Field */}
-      <div>
-        <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700 mb-1.5">
-          Confirm Password
-        </label>
-        <div className="relative">
-          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-            <Lock size={18} className="text-gray-400" />
+      {/* INPUT */}
+      <div className="border-t px-6 py-4 relative">
+        {showEmojiPicker && <div className="absolute bottom-16 right-6 z-50"><EmojiPicker onEmojiClick={(emoji) => setInput(prev => prev + emoji.emoji)}/></div>}
+        <input type="file" ref={fileInputRef} className="hidden" onChange={handleFileSelect}/>
+
+        {pendingFile && (
+          <div className="mb-4 bg-gray-50 border border-gray-200 rounded-xl p-4 flex items-center gap-4">
+            {pendingFilePreview ? <img src={pendingFilePreview} alt={pendingFile.name} className="w-16 h-16 rounded-lg object-cover border cursor-pointer" onClick={() => setImageModal(pendingFilePreview)}/> : <div className="w-16 h-16 rounded-lg bg-white border flex items-center justify-center text-xs text-gray-500">FILE</div>}
+            <div className="flex-1">
+              <div className="text-sm font-medium text-gray-800 truncate">{pendingFile.name}</div>
+              <div className="text-xs text-gray-500">{(pendingFile.size / 1024).toFixed(1)} KB</div>
+            </div>
+            <div className="flex items-center gap-2">
+              <button onClick={clearPendingFile} className="px-3 py-2 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-100 text-sm">Remove</button>
+              <button onClick={handleSendFile} disabled={uploadingFile} className={`px-3 py-2 rounded-lg text-white text-sm ${uploadingFile ? "bg-blue-300" : "bg-blue-600 hover:bg-blue-700"}`}>{uploadingFile ? "Sending..." : "Send file"}</button>
+            </div>
           </div>
-          <input
-            id="confirmPassword"
-            type={showConfirm ? "text" : "password"}
-            value={confirmPassword}
-            onChange={(e) => {
-              setConfirmPassword(e.target.value);
-              if (errors.confirmPassword) setErrors({ ...errors, confirmPassword: undefined });
-            }}
-            className={inputClasses(!!errors.confirmPassword)}
-            placeholder="••••••••"
-            disabled={loading}
-          />
-          <button
-            type="button"
-            onClick={() => setShowConfirm(!showConfirm)}
-            className="absolute inset-y-0 right-0 pr-3 flex items-center"
-          >
-            {showConfirm ? <EyeOff size={18} className="text-gray-400 hover:text-gray-600" /> : <Eye size={18} className="text-gray-400 hover:text-gray-600" />}
-          </button>
+        )}
+
+        <div className="flex items-end gap-3">
+          <div className="flex-1 relative">
+            <textarea
+              ref={inputRef}
+              rows={1}
+              value={input}
+              onChange={handleInputChange}
+              onKeyDown={handleKeyPress}
+              placeholder={`Message #${channel.name}`}
+              className="w-full resize-none rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 pr-20 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white"
+              style={{ minHeight: "44px", maxHeight: "120px" }}
+            />
+            <div className="absolute right-2 bottom-2 flex gap-1">
+              <button type="button" onClick={() => fileInputRef.current?.click()} className="p-2 hover:bg-gray-200 rounded-lg"><Paperclip size={18}/></button>
+              <button type="button" onClick={() => setShowEmojiPicker(prev => !prev)} className="p-2 hover:bg-gray-200 rounded-lg"><Smile size={18}/></button>
+            </div>
+          </div>
+          <button onClick={handleSend} disabled={!input.trim() && !pendingFile} className={`p-3 rounded-xl transition ${input.trim() || pendingFile ? "bg-blue-600 hover:bg-blue-700 text-white" : "bg-gray-100 text-gray-400 cursor-not-allowed"}`}><Send size={18}/></button>
         </div>
-        {errors.confirmPassword && (
-          <motion.p
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="mt-1.5 text-xs text-red-500 flex items-center gap-1"
-          >
-            <AlertCircle size={12} />
-            {errors.confirmPassword}
-          </motion.p>
-        )}
       </div>
-
-      {/* Submit Button */}
-      <motion.button
-        type="submit"
-        disabled={loading}
-        whileHover={{ scale: 1.02 }}
-        whileTap={{ scale: 0.98 }}
-        className={`w-full py-3 px-4 rounded-lg font-medium text-white flex items-center justify-center gap-2 ${
-          loading
-            ? 'bg-blue-400 cursor-not-allowed'
-            : 'bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 shadow-md hover:shadow-lg'
-        } transition-all duration-200`}
-      >
-        {loading ? (
-          <>
-            <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-            Signing up...
-          </>
-        ) : (
-          <>
-            <CheckCircle size={18} />
-            Register
-          </>
-        )}
-      </motion.button>
-
-    </form>
+    </div>
   );
 };
 
-export default RegisterForm;
+export default Chat;
