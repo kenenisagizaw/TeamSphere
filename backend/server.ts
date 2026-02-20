@@ -67,6 +67,8 @@ io.on("connection", (socket) => {
       content?: string;
       emoji?: string;
       fileUrl?: string;
+      fileName?: string;
+      fileType?: string;
     }) => {
       if (!msg.content && !msg.emoji && !msg.fileUrl) return;
 
@@ -75,6 +77,8 @@ io.on("connection", (socket) => {
           data: {
             content: msg.content || msg.emoji || "",
             fileUrl: msg.fileUrl || null,
+            fileName: msg.fileName || null,
+            fileType: msg.fileType || null,
             senderId: user.id,
             channelId: msg.channelId,
           },
@@ -85,6 +89,8 @@ io.on("connection", (socket) => {
           id: message.id,
           content: message.content,
           fileUrl: message.fileUrl,
+          fileName: message.fileName,
+          fileType: message.fileType,
           userName: message.sender.name,
           createdAt: message.createdAt.toISOString(),
         };
@@ -110,6 +116,8 @@ io.on("connection", (socket) => {
           data: {
             content: "",
             fileUrl: data.fileUrl,
+            fileName: data.fileName,
+            fileType: data.fileType,
             senderId: user.id,
             channelId: data.channelId,
           },
@@ -120,6 +128,8 @@ io.on("connection", (socket) => {
           id: message.id,
           content: "",
           fileUrl: message.fileUrl,
+          fileName: message.fileName,
+          fileType: message.fileType,
           userName: message.sender.name,
           createdAt: message.createdAt.toISOString(),
         });
