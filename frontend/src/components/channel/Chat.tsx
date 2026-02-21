@@ -245,13 +245,18 @@ const Chat: React.FC<Props> = ({ channel, onBack }) => {
   /* ================================
      UI
   ================================= */
-  if (!channel)
-    return (
-      <div className="flex-1 flex items-center justify-center bg-gray-50">
-        <MessageCircle size={32} className="mx-auto text-gray-400 mb-3" />
-        <p className="text-gray-600 text-sm">Select a channel to start chatting</p>
+ if (!channel) {
+  return (
+    <div className="flex h-full w-full items-center justify-center bg-gray-50">
+      <div className="text-center">
+        <MessageCircle size={36} className="mx-auto text-gray-400 mb-4" />
+        <p className="text-gray-600 text-sm font-medium">
+          Select a channel to start chatting
+        </p>
       </div>
-    );
+    </div>
+  );
+}
 
   return (
     <div className="flex-1 flex flex-col h-full bg-white">
@@ -304,7 +309,7 @@ const Chat: React.FC<Props> = ({ channel, onBack }) => {
                             src={resolveFileUrl(msg.fileUrl)}
                             alt={msg.fileName ?? "uploaded"}
                             className="rounded-lg max-w-xs cursor-pointer"
-                            onClick={() => setModalImage(resolveFileUrl(msg.fileUrl))}
+                            onClick={() => msg.fileUrl && setModalImage(resolveFileUrl(msg.fileUrl))}
                           />
                         ) : (
                           <a href={resolveFileUrl(msg.fileUrl)} target="_blank" rel="noopener noreferrer" className="underline">
